@@ -1,0 +1,57 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // 1. BENUTZERDATEN & UNTERKOLLEKTIONEN (/users/{uid})
+    // ===============================================================
+    // Jeder authentifizierte Nutzer kann AUSSCHLIESSLICH auf sein
+    // eigenes Benutzerdokument und alle darunterliegenden Daten zugreifen.
+    match /users/{uid} {
+      // Profil lesen, erstellen, aktualisieren und löschen (nur der eigene Account)
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      // Schlafaufzeichnungen (/users/{uid}/sleepLogs/{date})
+      match /sleepLogs/{date} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
+      // Konfiguration & individuelle Gewohnheiten (/users/{uid}/config/{configId})
+      match /config/{configId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+
+    // ===============================================================
+    // 2. BENUTZERNAMEN-REGISTRIERUNG (/usernames/{username})
+    // ===============================================================
+    // Dient der Live-Prüfung, ob ein Benutzername noch frei ist.
+    match /usernames/{username} {
+      // Jeder (auch vor dem Absenden der Registrierung) darf prüfen, ob ein Name existiert
+      allow read: if true;
+
+      // Erstellen: Nur ein angemeldeter Nutzer für sich selbst (uid muss übereinstimmen)
+      // und der Eintrag darf noch nicht existieren
+      allow create: if request.auth != null 
+                    && request.resource.data.uid == request.auth.uid;
+
+      // Löschen: Nur der Nutzer, dem der Benutzername tatsächlich gehört (z.B. bei Umbenennung oder Kontolöschung)
+      allow delete: if request.auth != null 
+                    && resource.data.uid == request.auth.uid;
+
+      // Aktualisieren verhindern (Namen werden neu angelegt oder freigegeben, nie fremd überschrieben)
+      allow update: if request.auth != null 
+                    && resource.data.uid == request.auth.uid 
+                    && request.resource.data.uid == request.auth.uid;
+    }
+
+    // ===============================================================
+    // 3. STANDARD-SPERRE FÜR ALLE ANDEREN PFADE
+    // ===============================================================
+    // Alles andere wird ausnahmslos blockiert.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

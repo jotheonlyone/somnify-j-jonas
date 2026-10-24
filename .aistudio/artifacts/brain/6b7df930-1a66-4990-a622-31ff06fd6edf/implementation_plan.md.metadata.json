@@ -1,0 +1,6 @@
+{
+  "summary":  "Architektur- und Implementierungsplan für die Schlafrhythmus-App Somnify mit Flat-Design, dreistufigem Morgenerfassungs-Flow, Firebase Auth & Firestore, sowie dem statistischen Korrelations- und Synergie-Algorithmus für Gewohnheiten und Schlafphasen.",
+  "updatedAt":  "2026-10-23T13:16:01.158962257Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

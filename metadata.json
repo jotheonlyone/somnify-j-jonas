@@ -1,0 +1,6 @@
+{
+  "name": "Somnify - Schlafphasen & Schlafrhythmus Tracker",
+  "description": "Intelligenter Schlaftracker im modernen Flat-Design zur Erkennung von Schlafrhythmen und Korrelationen zwischen Gewohnheiten und Tief- bzw. REM-Schlaf.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
