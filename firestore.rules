@@ -47,7 +47,17 @@ service cloud.firestore {
     }
 
     // ===============================================================
-    // 3. STANDARD-SPERRE FÜR ALLE ANDEREN PFADE
+    // 3. APP-KONFIGURATION & VERSIONSPRÜFUNG (/appConfig/{docId})
+    // ===============================================================
+    // Erlaubt allen Nutzern das Lesen der aktuellen Versionsnummer.
+    // Schreibrechte sind gesperrt (Änderungen nur über die Firebase Console).
+    match /appConfig/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ===============================================================
+    // 4. STANDARD-SPERRE FÜR ALLE ANDEREN PFADE
     // ===============================================================
     // Alles andere wird ausnahmslos blockiert.
     match /{document=**} {

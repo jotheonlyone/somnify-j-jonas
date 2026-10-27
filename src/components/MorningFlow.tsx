@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Factor, SleepLog } from '../types';
-import { formatMinutes, getTodayDateString } from '../lib/sleepAnalysis';
+import { formatMinutes, getTodayDateString, formatGermanDate } from '../lib/sleepAnalysis';
 import { renderHabitIcon } from '../lib/iconHelper';
 import { ArrowRight, Check } from 'lucide-react';
 
@@ -26,7 +26,7 @@ export const MorningFlow: React.FC<MorningFlowProps> = ({
   const [deepMinutes, setDeepMinutes] = useState<number>(initialLog ? initialLog.deepMinutes : 105);
   const [remMinutes, setRemMinutes] = useState<number>(initialLog ? initialLog.remMinutes : 90);
   const [selectedFactorIds, setSelectedFactorIds] = useState<string[]>(
-    initialLog ? initialLog.activeFactors : []
+    initialLog ? initialLog.activeFactors.filter((id) => factors.some((f) => f.id === id)) : []
   );
 
   // Calculate light sleep remaining
@@ -69,7 +69,11 @@ export const MorningFlow: React.FC<MorningFlowProps> = ({
       <div className="pt-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold tracking-wider uppercase text-emerald-600 dark:text-emerald-500">
-            {isEditing ? 'Schlafdaten anpassen' : 'Guten Morgen'}
+            {isEditing
+              ? initialLog?.date
+                ? `Schlafdaten anpassen (${formatGermanDate(initialLog.date)})`
+                : 'Schlafdaten anpassen'
+              : 'Guten Morgen'}
           </span>
           <span className="text-slate-300 dark:text-slate-700">·</span>
           <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">

@@ -6,6 +6,8 @@ import { TodayTab } from './components/TodayTab';
 import { StatisticsTab } from './components/StatisticsTab';
 import { SettingsTab } from './components/SettingsTab';
 import { SettingsModal, AppTheme, SettingsTabType } from './components/SettingsModal';
+import { AboutModal } from './components/AboutModal';
+import { UpdateNoticeModal } from './components/UpdateNoticeModal';
 import { BottomNav, TabType } from './components/BottomNav';
 import {
   auth,
@@ -21,20 +23,40 @@ import {
   generateSampleLogs,
 } from './lib/sleepAnalysis';
 import { onAuthStateChanged } from 'firebase/auth';
-import { Settings, Sliders, Bell, User, ChevronRight } from 'lucide-react';
+import { syncNotificationsOnStartup, cancelTodayMorningNotifications } from './lib/notifications';
+import { checkForAppUpdate, dismissUpdateForVersion, APP_VERSION } from './lib/appVersion';
+import { Settings, Sliders, Bell, User, ChevronRight, Info } from 'lucide-react';
 
 export default function App() {
+  // Migrate notification settings & replace old (buggy) scheduled notifications once on start
+  useEffect(() => {
+    syncNotificationsOnStartup();
+  }, []);
+
+  // Check for app updates on startup
+  useEffect(() => {
+    checkForAppUpdate().then((res) => {
+      if (res.hasUpdate && res.shouldNotify) {
+        setUpdateNotice({ latestVersion: res.latestVersion });
+      }
+    });
+  }, []);
+
   const [user, setUser] = useState<UserProfile | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [factors, setFactors] = useState<Factor[]>(DEFAULT_FACTORS);
+  const [archivedFactors, setArchivedFactors] = useState<Factor[]>([]);
   const [logs, setLogs] = useState<SleepLog[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>('heute');
   const [isEnteringMorningFlow, setIsEnteringMorningFlow] = useState<boolean>(false);
   const [isEditingExisting, setIsEditingExisting] = useState<boolean>(false);
+  const [editingLog, setEditingLog] = useState<SleepLog | null>(null);
 
   // Settings dropdown & fullscreen modal state
   const [isSettingsDropdownOpen, setIsSettingsDropdownOpen] = useState<boolean>(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
+  const [isAboutModalOpen, setIsAboutModalOpen] = useState<boolean>(false);
+  const [updateNotice, setUpdateNotice] = useState<{ latestVersion: string } | null>(null);
   const [selectedSettingsTab, setSelectedSettingsTab] = useState<SettingsTabType>('allgemein');
 
   // Theme State: 'light' | 'dark' | 'system'
@@ -111,13 +133,18 @@ export default function App() {
     if (!user) {
       setLogs([]);
       setFactors(DEFAULT_FACTORS);
+      setArchivedFactors([]);
       setIsEnteringMorningFlow(false);
       return;
     }
 
     const loadUserData = async () => {
-      const userFactors = await fetchUserFactors(user.uid, DEFAULT_FACTORS);
+      const { factors: userFactors, archivedFactors: userArchived } = await fetchUserFactors(
+        user.uid,
+        DEFAULT_FACTORS
+      );
       setFactors(userFactors);
+      setArchivedFactors(userArchived);
 
       let userLogs = await fetchSleepLogs(user.uid);
 
@@ -133,6 +160,9 @@ export default function App() {
       // Morning time window condition (02:00 to 11:00)
       const today = getTodayDateString();
       const hasTodayLog = userLogs.some((l) => l.date === today);
+      if (hasTodayLog) {
+        cancelTodayMorningNotifications();
+      }
       const currentHour = new Date().getHours();
       const isMorningWindow = currentHour >= 2 && currentHour < 11;
 
@@ -176,6 +206,11 @@ export default function App() {
     if (!user) return;
     await saveSleepLog(user.uid, log);
 
+    // If today's log was entered, prevent any further morning reminder today
+    if (log.date === getTodayDateString()) {
+      await cancelTodayMorningNotifications();
+    }
+
     setLogs((prev) => {
       const filtered = prev.filter((l) => l.date !== log.date);
       return [log, ...filtered].sort((a, b) => b.date.localeCompare(a.date));
@@ -183,6 +218,7 @@ export default function App() {
 
     setIsEnteringMorningFlow(false);
     setIsEditingExisting(false);
+    setEditingLog(null);
     setActiveTab('heute');
   };
 
@@ -190,34 +226,59 @@ export default function App() {
   const handleAddFactor = async (newFactor: Factor) => {
     if (!user) return;
     const updated = [...factors, newFactor];
+    const updatedArchived = archivedFactors.filter(
+      (f) => f.id !== newFactor.id && f.name.toLowerCase() !== newFactor.name.toLowerCase()
+    );
     setFactors(updated);
-    await saveUserFactors(user.uid, updated);
+    setArchivedFactors(updatedArchived);
+    await saveUserFactors(user.uid, updated, updatedArchived);
+  };
+
+  const handleRestoreFactor = async (restoredFactor: Factor) => {
+    if (!user) return;
+    const updated = [...factors, restoredFactor];
+    const updatedArchived = archivedFactors.filter((f) => f.id !== restoredFactor.id);
+    setFactors(updated);
+    setArchivedFactors(updatedArchived);
+    await saveUserFactors(user.uid, updated, updatedArchived);
   };
 
   const handleRemoveFactor = async (factorId: string) => {
     if (!user) return;
+    const toRemove = factors.find((f) => f.id === factorId);
     const updated = factors.filter((f) => f.id !== factorId);
+    let updatedArchived = archivedFactors;
+    if (toRemove) {
+      updatedArchived = [toRemove, ...archivedFactors.filter((f) => f.id !== factorId)];
+    }
     setFactors(updated);
-    await saveUserFactors(user.uid, updated);
+    setArchivedFactors(updatedArchived);
+    await saveUserFactors(user.uid, updated, updatedArchived);
   };
 
   const handleUpdateFactor = async (updatedFactor: Factor) => {
     if (!user) return;
     const updated = factors.map((f) => (f.id === updatedFactor.id ? updatedFactor : f));
     setFactors(updated);
-    await saveUserFactors(user.uid, updated);
+    await saveUserFactors(user.uid, updated, archivedFactors);
   };
 
   const handleReorderFactors = async (reordered: Factor[]) => {
     if (!user) return;
     setFactors(reordered);
-    await saveUserFactors(user.uid, reordered);
+    await saveUserFactors(user.uid, reordered, archivedFactors);
   };
 
   const handleResetFactors = async () => {
     if (!user) return;
+    const customFactors = factors.filter((f) => !DEFAULT_FACTORS.some((df) => df.id === f.id));
+    const updatedArchived = [
+      ...customFactors,
+      ...archivedFactors.filter((af) => !customFactors.some((cf) => cf.id === af.id)),
+    ];
     setFactors(DEFAULT_FACTORS);
-    await saveUserFactors(user.uid, DEFAULT_FACTORS);
+    setArchivedFactors(updatedArchived);
+    await saveUserFactors(user.uid, DEFAULT_FACTORS, updatedArchived);
   };
 
   // Open full-screen settings from dropdown selection
@@ -252,15 +313,20 @@ export default function App() {
 
   // 3. Morning Entry Flow
   if (isEnteringMorningFlow) {
+    const activeLog = editingLog || todayLog;
     return (
       <MorningFlow
         factors={factors}
-        initialLog={todayLog}
+        initialLog={activeLog}
         isEditing={isEditingExisting}
         onComplete={handleMorningFlowComplete}
         onCancel={
-          todayLog || logs.length > 0
-            ? () => setIsEnteringMorningFlow(false)
+          activeLog || logs.length > 0
+            ? () => {
+                setIsEnteringMorningFlow(false);
+                setIsEditingExisting(false);
+                setEditingLog(null);
+              }
             : undefined
         }
       />
@@ -341,6 +407,24 @@ export default function App() {
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-400 shrink-0 ml-2" />
                 </button>
+
+                {/* 4. Über Somnify */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSettingsDropdownOpen(false);
+                    setIsAboutModalOpen(true);
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl flex items-center justify-between text-left hover:bg-slate-100 dark:hover:bg-[#1a2333] text-slate-800 dark:text-slate-200 transition-colors cursor-pointer group"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                      <Info className="w-4 h-4 shrink-0" />
+                    </div>
+                    <span className="text-sm font-semibold truncate">Über Somnify</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400 shrink-0 ml-2" />
+                </button>
               </div>
             </>
           )}
@@ -355,7 +439,13 @@ export default function App() {
             factors={factors}
             recentLogs={logs}
             onEditToday={() => {
+              setEditingLog(todayLog);
               setIsEditingExisting(!!todayLog);
+              setIsEnteringMorningFlow(true);
+            }}
+            onEditLog={(logToEdit) => {
+              setEditingLog(logToEdit);
+              setIsEditingExisting(true);
               setIsEnteringMorningFlow(true);
             }}
           />
@@ -371,7 +461,9 @@ export default function App() {
         {activeTab === 'anpassen' && (
           <SettingsTab
             factors={factors}
+            archivedFactors={archivedFactors}
             onAddFactor={handleAddFactor}
+            onRestoreFactor={handleRestoreFactor}
             onRemoveFactor={handleRemoveFactor}
             onUpdateFactor={handleUpdateFactor}
             onReorderFactors={handleReorderFactors}
@@ -393,6 +485,27 @@ export default function App() {
         currentTheme={currentTheme}
         onThemeChange={(theme) => setCurrentTheme(theme)}
       />
+
+      {/* Full-Screen Über Somnify View */}
+      <AboutModal
+        isOpen={isAboutModalOpen}
+        onClose={() => setIsAboutModalOpen(false)}
+      />
+
+      {/* Update Notice Modal */}
+      {updateNotice && (
+        <UpdateNoticeModal
+          isOpen={!!updateNotice}
+          latestVersion={updateNotice.latestVersion}
+          currentVersion={APP_VERSION}
+          onConfirm={(dontShowAgain) => {
+            if (dontShowAgain) {
+              dismissUpdateForVersion(updateNotice.latestVersion);
+            }
+            setUpdateNotice(null);
+          }}
+        />
+      )}
 
       {/* Fixed Bottom Navigation (Heute, Statistik, Anpassen) */}
       <BottomNav activeTab={activeTab} onChangeTab={setActiveTab} />

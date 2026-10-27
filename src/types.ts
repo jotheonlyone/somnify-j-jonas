@@ -10,6 +10,7 @@ export interface Factor {
   isDefault?: boolean;
   category?: 'drink' | 'activity' | 'routine' | 'other';
   icon?: string;
+  isArchived?: boolean;
 }
 
 export interface SleepLog {
@@ -50,6 +51,7 @@ export interface FactorImpact {
   secondaryDiffPercent?: number;
   summaryText: string;
   isNegative: boolean;
+  severity: 'red' | 'orange' | 'green'; // red = >=12% drop, orange = 5-11.9% drop, green = positive (>=5%)
 }
 
 export interface SynergyImpact {
@@ -58,6 +60,8 @@ export interface SynergyImpact {
   factorAName: string;
   factorBName: string;
   occurrences: number;
+  avgDeepPercentBoth: number;
+  avgRemPercentBoth: number;
   combinedDeepDiffPercent: number;
   combinedRemDiffPercent: number;
   expectedSumPercent: number;
@@ -65,6 +69,7 @@ export interface SynergyImpact {
   metric: 'deep' | 'rem';
   summaryText: string;
   isNegative: boolean;
+  severity: 'red' | 'orange' | 'green';
 }
 
 export interface SleepBaseline {
@@ -77,10 +82,16 @@ export interface SleepBaseline {
   avgRemPercent: number;
 }
 
+export interface NotificationRule {
+  id: string;
+  days: number[]; // 0 = Mo … 6 = So
+  time: string; // e.g. "08:00"
+}
+
 export interface NotificationSettings {
   enabled: boolean;
   morningEnabled: boolean;
-  morningTime: string; // e.g. "08:00"
+  morningRules: NotificationRule[]; // e.g. Mo–Fr 06:00, Sa–So 09:00
   bedtimeEnabled: boolean;
-  bedtimeTime: string; // e.g. "22:30"
+  bedtimeRules: NotificationRule[];
 }

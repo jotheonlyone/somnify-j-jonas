@@ -2,12 +2,13 @@ import React from 'react';
 import { SleepLog, Factor } from '../types';
 import { formatMinutes, formatGermanDate, getTodayDateString } from '../lib/sleepAnalysis';
 import { renderHabitIcon } from '../lib/iconHelper';
-import { Edit3, Moon, PlusCircle } from 'lucide-react';
+import { Edit3, Moon, PlusCircle, Pencil } from 'lucide-react';
 
 interface TodayTabProps {
   todayLog: SleepLog | null;
   factors: Factor[];
   onEditToday: () => void;
+  onEditLog?: (log: SleepLog) => void;
   recentLogs: SleepLog[];
 }
 
@@ -15,10 +16,18 @@ export const TodayTab: React.FC<TodayTabProps> = ({
   todayLog,
   factors,
   onEditToday,
+  onEditLog,
   recentLogs,
 }) => {
   const factorMap = new Map(factors.map((f) => [f.id, f]));
   const todayStr = getTodayDateString();
+
+  // Filter today's active factors: only show factors that are currently active (prevents showing deleted IDs like custom_123)
+  const activeTodayFactors = todayLog
+    ? todayLog.activeFactors
+        .map((fid) => factorMap.get(fid))
+        .filter((f): f is Factor => Boolean(f))
+    : [];
 
   if (!todayLog) {
     return (
@@ -156,24 +165,21 @@ export const TodayTab: React.FC<TodayTabProps> = ({
             Erfasste Gewohnheiten & Einflüsse
           </h2>
           <span className="text-xs text-slate-400 font-semibold">
-            {todayLog.activeFactors.length} ausgewählt
+            {activeTodayFactors.length} ausgewählt
           </span>
         </div>
 
-        {todayLog.activeFactors.length > 0 ? (
+        {activeTodayFactors.length > 0 ? (
           <div className="flex flex-wrap gap-2">
-            {todayLog.activeFactors.map((fid) => {
-              const factor = factorMap.get(fid);
-              return (
-                <div
-                  key={fid}
-                  className="px-3.5 py-2 rounded-xl bg-white dark:bg-[#1a2333] border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold flex items-center gap-2"
-                >
-                  {renderHabitIcon(factor?.icon, "w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0")}
-                  <span>{factor ? factor.name : fid}</span>
-                </div>
-              );
-            })}
+            {activeTodayFactors.map((factor) => (
+              <div
+                key={factor.id}
+                className="px-3.5 py-2 rounded-xl bg-white dark:bg-[#1a2333] border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold flex items-center gap-2"
+              >
+                {renderHabitIcon(factor.icon, "w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0")}
+                <span>{factor.name}</span>
+              </div>
+            ))}
           </div>
         ) : (
           <p className="text-xs text-slate-500 dark:text-slate-400 italic">
@@ -205,9 +211,21 @@ export const TodayTab: React.FC<TodayTabProps> = ({
                       Tief: {formatMinutes(pastLog.deepMinutes)} · REM: {formatMinutes(pastLog.remMinutes)}
                     </span>
                   </div>
-                  <span className="text-sm font-bold font-display text-slate-900 dark:text-white tabular-nums">
-                    {formatMinutes(pastLog.totalMinutes)}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold font-display text-slate-900 dark:text-white tabular-nums">
+                      {formatMinutes(pastLog.totalMinutes)}
+                    </span>
+                    {onEditLog && (
+                      <button
+                        type="button"
+                        onClick={() => onEditLog(pastLog)}
+                        title={`${formatGermanDate(pastLog.date)} bearbeiten`}
+                        className="p-1 rounded-lg text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-[#1a2333] transition-colors cursor-pointer"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
           </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { UserProfile, NotificationSettings } from '../types';
+import { UserProfile, NotificationSettings, NotificationRule } from '../types';
+import { NotificationRulesEditor } from './NotificationRulesEditor';
 import {
   changeUsername,
   changeUserPassword,
@@ -10,7 +11,8 @@ import {
   scheduleAppNotifications,
   requestNotificationPermissions,
   cancelAllScheduledNotifications,
-  DEFAULT_NOTIFICATIONS,
+  loadNotificationSettings,
+  saveNotificationSettings,
 } from '../lib/notifications';
 import {
   X,
@@ -88,15 +90,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Notifications State
-  const [notifications, setNotifications] = useState<NotificationSettings>(() => {
-    const saved = localStorage.getItem('somnify_notifications');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {}
-    }
-    return DEFAULT_NOTIFICATIONS;
-  });
+  const [notifications, setNotifications] = useState<NotificationSettings>(() =>
+    loadNotificationSettings()
+  );
   const [notifFeedback, setNotifFeedback] = useState<{
     text: string;
     type: 'success' | 'warning';
@@ -240,7 +236,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
     const updated = { ...notifications, enabled };
     setNotifications(updated);
-    localStorage.setItem('somnify_notifications', JSON.stringify(updated));
+    saveNotificationSettings(updated);
     await scheduleAppNotifications(updated);
     setNotifFeedback({
       type: 'success',
@@ -249,10 +245,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setTimeout(() => setNotifFeedback(null), 4000);
   };
 
-  const handleUpdateNotifTime = async (key: 'morningTime' | 'bedtimeTime', val: string) => {
-    const updated = { ...notifications, [key]: val };
+  const handleUpdateNotifRules = async (key: 'morningRules' | 'bedtimeRules', rules: NotificationRule[]) => {
+    const updated = { ...notifications, [key]: rules };
     setNotifications(updated);
-    localStorage.setItem('somnify_notifications', JSON.stringify(updated));
+    saveNotificationSettings(updated);
     if (notifications.enabled) {
       await scheduleAppNotifications(updated);
     }
@@ -261,7 +257,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleToggleSpecificNotif = async (key: 'morningEnabled' | 'bedtimeEnabled', val: boolean) => {
     const updated = { ...notifications, [key]: val };
     setNotifications(updated);
-    localStorage.setItem('somnify_notifications', JSON.stringify(updated));
+    saveNotificationSettings(updated);
     if (notifications.enabled) {
       await scheduleAppNotifications(updated);
     }
@@ -447,17 +443,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 />
               </div>
 
-              <div className="flex items-center gap-2 pt-1">
-                <Clock className="w-4 h-4 text-slate-400" />
-                <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">Uhrzeit:</span>
-                <input
-                  type="time"
-                  disabled={!notifications.enabled || !notifications.morningEnabled}
-                  value={notifications.morningTime}
-                  onChange={(e) => handleUpdateNotifTime('morningTime', e.target.value)}
-                  className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#090d16] border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
-                />
-              </div>
+              <NotificationRulesEditor
+                rules={notifications.morningRules}
+                disabled={!notifications.enabled || !notifications.morningEnabled}
+                defaultTime="08:00"
+                onChange={(rules) => handleUpdateNotifRules('morningRules', rules)}
+              />
             </div>
 
             {/* Sub-Notification: Schlafenszeit */}
@@ -484,17 +475,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 />
               </div>
 
-              <div className="flex items-center gap-2 pt-1">
-                <Clock className="w-4 h-4 text-slate-400" />
-                <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">Uhrzeit:</span>
-                <input
-                  type="time"
-                  disabled={!notifications.enabled || !notifications.bedtimeEnabled}
-                  value={notifications.bedtimeTime}
-                  onChange={(e) => handleUpdateNotifTime('bedtimeTime', e.target.value)}
-                  className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#090d16] border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
-                />
-              </div>
+              <NotificationRulesEditor
+                rules={notifications.bedtimeRules}
+                disabled={!notifications.enabled || !notifications.bedtimeEnabled}
+                defaultTime="22:30"
+                onChange={(rules) => handleUpdateNotifRules('bedtimeRules', rules)}
+              />
             </div>
           </div>
         )}

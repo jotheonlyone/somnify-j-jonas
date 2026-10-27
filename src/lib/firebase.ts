@@ -265,6 +265,7 @@ export async function deleteEntireAccount(currentPass: string, username: string)
   localStorage.removeItem(`somnify_profile_${uid}`);
   localStorage.removeItem(`somnify_logs_${uid}`);
   localStorage.removeItem(`somnify_factors_${uid}`);
+  localStorage.removeItem(`somnify_archived_factors_${uid}`);
 
   // 6. Delete Firebase Auth user
   await deleteUser(user);
@@ -313,43 +314,67 @@ export async function fetchSleepLogs(uid: string): Promise<SleepLog[]> {
   return getLocalSleepLogs(uid);
 }
 
-// Save Factors
-export async function saveUserFactors(uid: string, factors: Factor[]): Promise<void> {
+// Save Factors & Archived Factors
+export async function saveUserFactors(
+  uid: string,
+  factors: Factor[],
+  archivedFactors: Factor[] = []
+): Promise<void> {
   try {
     const userDocRef = doc(db, "users", uid, "config", "factors");
     await setDoc(userDocRef, {
       factors,
+      archivedFactors,
       updatedAt: serverTimestamp()
     });
   } catch (err) {
     console.warn("Firestore factors save fallback:", err);
   }
   localStorage.setItem(`somnify_factors_${uid}`, JSON.stringify(factors));
+  localStorage.setItem(`somnify_archived_factors_${uid}`, JSON.stringify(archivedFactors));
 }
 
-// Fetch Factors
-export async function fetchUserFactors(uid: string, defaultFactors: Factor[]): Promise<Factor[]> {
+// Fetch Factors & Archived Factors
+export async function fetchUserFactors(
+  uid: string,
+  defaultFactors: Factor[]
+): Promise<{ factors: Factor[]; archivedFactors: Factor[] }> {
   try {
     const userDocRef = doc(db, "users", uid, "config", "factors");
     const snap = await getDoc(userDocRef);
     if (snap.exists() && snap.data()?.factors) {
-      const factors = snap.data().factors as Factor[];
+      const data = snap.data();
+      const factors = (data.factors as Factor[]) || defaultFactors;
+      const archivedFactors = (data.archivedFactors as Factor[]) || [];
       localStorage.setItem(`somnify_factors_${uid}`, JSON.stringify(factors));
-      return factors;
+      localStorage.setItem(`somnify_archived_factors_${uid}`, JSON.stringify(archivedFactors));
+      return { factors, archivedFactors };
     }
   } catch (err) {
     console.warn("Firestore fetch factors fallback:", err);
   }
 
   const local = localStorage.getItem(`somnify_factors_${uid}`);
+  const localArchived = localStorage.getItem(`somnify_archived_factors_${uid}`);
+  let factors = defaultFactors;
+  let archivedFactors: Factor[] = [];
+
   if (local) {
     try {
-      return JSON.parse(local);
+      factors = JSON.parse(local);
     } catch (e) {
-      return defaultFactors;
+      factors = defaultFactors;
     }
   }
-  return defaultFactors;
+  if (localArchived) {
+    try {
+      archivedFactors = JSON.parse(localArchived);
+    } catch (e) {
+      archivedFactors = [];
+    }
+  }
+
+  return { factors, archivedFactors };
 }
 
 // Local storage helper
